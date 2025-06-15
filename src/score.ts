@@ -1,27 +1,31 @@
-export enum Clef {
+export enum XMLClef {
   G,
 }
 
-export type Note = {
+export type XMLNote = {
    ID: number;
    Beat: number;
    Duration: number; // should be divided by 4 from XML value
    NoteName: string;
+   Tied: boolean;
+   Staff: number;
+   Grace: boolean;
+   Voice: number;
 }
 
-export type Measure = {
+export type XMLMeasure = {
   ID: number,
-  Clef: Clef,
+  Clef: XMLClef,
   Key: string,
   TimeSignature: { top: number, bottom: number },
-  Notes: Note[],
+  Notes: XMLNote[],
 };
 
-export type Score = {
-  Measures: Measure[]
+export type XMLScore = {
+  Measures: XMLMeasure[]
 }
 
-export function CreateEmptyScore(): Score {
+export function CreateEmptyScore(): XMLScore {
   return {
     Measures: [],
   };
