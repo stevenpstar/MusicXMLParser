@@ -38,6 +38,7 @@ export function ParseTextPartWise(fileString: string): XMLScore {
 
   let CurrentMeasure: XMLMeasure = null;
   let CurrentNote: XMLNote = null;
+  let MeasureDivisions: number = 1;
   let RunningNoteID: number = 0;
   let CurrentBeat = 1;
   let NoteLetter: string = "";
@@ -46,11 +47,16 @@ export function ParseTextPartWise(fileString: string): XMLScore {
   Params.lines.forEach((line: string) => {
     if (line.includes(Token.MeasureStart)) {
       CurrentMeasure = FindMeasure(Params, line);
+      CurrentBeat = 1;
     }
     if (CurrentMeasure) {
 
       if (line.includes("</measure")) {
         CurrentMeasure = null;
+      }
+
+      if (line.includes("<divisions")) {
+        MeasureDivisions = parseInt(GetContentBetweenTags(line));
       }
 
       else if (line.includes("<fifths")) {
@@ -61,45 +67,43 @@ export function ParseTextPartWise(fileString: string): XMLScore {
         }
         CurrentMeasure.Key = keyString;
       }
-      else if (line.includes("<beats>")) {
+      else if (line.includes("<beats")) {
         let beat = parseInt(GetContentBetweenTags(line));
         CurrentMeasure.TimeSignature.top = beat;
-      } else if (line.includes("<beat-type>")) {
+      } else if (line.includes("<beat-type")) {
         let beatType = parseInt(GetContentBetweenTags(line));
         CurrentMeasure.TimeSignature.bottom = beatType;
-      } else if (line.includes("<sign>")) {
+      } else if (line.includes("<sign")) {
         let clefType = GetContentBetweenTags(line);
         CurrentMeasure.Clef = ReturnClefType(clefType);
       }
 
       if (line.includes("<note")) {
-        console.log("Found a note!");
         CurrentNote = null;
         CurrentNote = CreateEmptyNote(RunningNoteID);
         CurrentMeasure.Notes.push(CurrentNote);
-        CurrentBeat = 1;
         CurrentNote.Beat = CurrentBeat;
-      } else if (line.includes("</note>")) {
+      } else if (line.includes("</note")) {
         CurrentNote = null;
         RunningNoteID += 1;
       }
 
       if (CurrentNote) {
 
-        if (line.includes("<step>")) {
+        if (line.includes("<step")) {
             NoteLetter = GetContentBetweenTags(line);
             if (NoteOctave !== "") {
               CurrentNote.NoteName = NoteLetter + NoteOctave;
             }
-          } else if (line.includes("<octave>")) {
+          } else if (line.includes("<octave")) {
             NoteOctave = GetContentBetweenTags(line);
             if (NoteLetter !== "") {
               CurrentNote.NoteName = NoteLetter + NoteOctave;
             }
-          } else if (line.includes("<duration>")) {
+          } else if (line.includes("<duration")) {
             let note_duration = parseInt(GetContentBetweenTags(line)) / 4;
-            CurrentNote.Duration = note_duration;
-            CurrentBeat += note_duration * 4;
+            CurrentNote.Duration = note_duration / MeasureDivisions;
+            CurrentBeat += CurrentNote.Duration * 4;
           }
 
       } // CurrentNote End Loop
@@ -119,6 +123,7 @@ function FindMeasure(params: Params, line: String): XMLMeasure {
       let split_line = line.split('"');
       if (split_line.length >= 3) {
         id = parseInt(split_line[1]);
+        console.log("Parsed measure id: ", id);
       }
     }
     let msr: XMLMeasure = CreateEmptyMeasure(id);

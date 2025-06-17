@@ -1,4 +1,5 @@
 import { ParseTextPartWise } from "./parser.js";
+import { XMLScore } from "./score.js";
 
 const testString2 = `
 <?xml version="1.0" encoding="UTF-8"?>
@@ -206,6 +207,13 @@ export module MXMLParser {
     }
     elem.innerHTML = JSON.stringify(ParseTextPartWise(testString2), null, 2);
   }
+
+  export function ParsePartWise(score: string): XMLScore {
+    return ParseTextPartWise(score);
+  }
+
 }
+
+export { XMLScore } from "./score.js";
 
 

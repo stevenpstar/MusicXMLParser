@@ -13,6 +13,8 @@
   },
   "scripts": {
     "build": "npx tsc && npx tsup --format esm --minify --dts",
-    "start": "live-server"
+    "start": "live-server",
+    "mxmlbundle": "tsup --format esm --minify --dts && rm -rf ../DebugSheetV2/modules/mxml && cp -r dist ../DebugSheetV2/modules/mxml"
+
   }
 }
