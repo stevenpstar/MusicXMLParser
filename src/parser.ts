@@ -41,10 +41,13 @@ export function ParseTextPartWise(fileString: string): XMLScore {
   let MeasureDivisions: number = 1;
   let RunningNoteID: number = 0;
   let CurrentBeat = 1;
+  let LastBeat = 1;
+  let LastDuration = 0;
   let NoteLetter: string = "";
   let NoteOctave: string = "";
+  let IsChord: boolean = false;
 
-  Params.lines.forEach((line: string) => {
+  Params.lines.forEach((line: string, i: number) => {
     if (line.includes(Token.MeasureStart)) {
       CurrentMeasure = FindMeasure(Params, line);
       CurrentBeat = 1;
@@ -53,6 +56,9 @@ export function ParseTextPartWise(fileString: string): XMLScore {
 
       if (line.includes("</measure")) {
         CurrentMeasure = null;
+        LastBeat = 1;
+        CurrentBeat = 1;
+        LastDuration = 0;
       }
 
       if (line.includes("<divisions")) {
@@ -79,16 +85,28 @@ export function ParseTextPartWise(fileString: string): XMLScore {
       }
 
       if (line.includes("<note")) {
+        IsChord = false;
         CurrentNote = null;
         CurrentNote = CreateEmptyNote(RunningNoteID);
-        CurrentMeasure.Notes.push(CurrentNote);
+        // Get Next line to search for <chord /> tag, this is probably not be reliable. Will need to test.
+        if (i + 1 <= Params.lines.length - 1) {
+          if (!Params.lines[i+1].includes("<chord")) {
+            CurrentBeat += LastDuration * 4;
+          }
+        }
+
         CurrentNote.Beat = CurrentBeat;
+        CurrentMeasure.Notes.push(CurrentNote);
       } else if (line.includes("</note")) {
         CurrentNote = null;
         RunningNoteID += 1;
       }
 
       if (CurrentNote) {
+
+        if (line.includes("<chord")) {
+          IsChord = true;
+        }
 
         if (line.includes("<step")) {
             NoteLetter = GetContentBetweenTags(line);
@@ -103,7 +121,7 @@ export function ParseTextPartWise(fileString: string): XMLScore {
           } else if (line.includes("<duration")) {
             let note_duration = parseInt(GetContentBetweenTags(line)) / 4;
             CurrentNote.Duration = note_duration / MeasureDivisions;
-            CurrentBeat += CurrentNote.Duration * 4;
+            LastDuration = CurrentNote.Duration;
           }
 
       } // CurrentNote End Loop
@@ -155,6 +173,8 @@ function ReturnKeyString(keyData: number): string {
       return "CMaj/Amin";
     case -1:
       return "FMaj/Dmin";
+    case 2:
+      return "DMaj/Bmin";
     default:
       return "KeyNotFound";
   }
