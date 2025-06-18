@@ -1,5 +1,10 @@
-export enum XMLClef {
-  G,
+export type XMLClef = {
+  Type: string;
+  Staff: number;
+}
+
+export type XMLStaff = {
+  Number: number;
 }
 
 export type XMLNote = {
@@ -11,11 +16,13 @@ export type XMLNote = {
    Staff: number;
    Grace: boolean;
    Voice: number;
+   Alter: number;
 }
 
 export type XMLMeasure = {
   ID: number,
-  Clef: XMLClef,
+  Clefs: XMLClef[],
+  Staves: XMLStaff[],
   Key: string,
   TimeSignature: { top: number, bottom: number },
   Notes: XMLNote[],
