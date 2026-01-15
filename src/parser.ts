@@ -1,4 +1,5 @@
-import { XMLClef, CreateEmptyScore, XMLMeasure, XMLNote, XMLScore } from "./score.js";
+import { TieNotesInMeasure } from "./parse_note.js";
+import { XMLClef, CreateEmptyScore, XMLMeasure, XMLNote, XMLScore, XMLInstrument, XMLArticulation, XMLArticulationType, XMLDynamic } from "./score.js";
 
 type Params = {
   state: State,
@@ -7,8 +8,9 @@ type Params = {
 };
 
 enum State {
-  FindMeasure = 0,
-  DefineMeasure = 1,
+  FindParts = 0,
+  FindMeasure = 1,
+  DefineMeasure = 2,
 };
 
 enum Token {
@@ -16,19 +18,28 @@ enum Token {
   EndTagStart = "</",
   CloseTagEnd = ">",
   Score = "score-part",
-  PartList = "part-list",
-  Part = "score-part",
+  PartList = "<part-list",
+  EndPartList = "</part-list",
+  ScorePart = "<score-part",
+  ScorePartWise = "<score-partwise", 
+  Part = "<part",
   MeasureStart = "<measure",
   MeasureEnd = "</measure>",
+  TiedStart = "<tie",
+  Staccato = "<staccato",
+  Marcato = "<strong-accent",
+  Accent = "<accent",
+  Dynamics = "<dynamic"
 };
 
 export function ParseTextPartWise(fileString: string): XMLScore {
   const Params: Params = {
-    state: State.FindMeasure,
+    state: State.FindParts,
     score: CreateEmptyScore(),
     lines: fileString.split("\n")
   };
 
+  let CurrentInstrument: XMLInstrument = null;
   let CurrentMeasure: XMLMeasure = null;
   let CurrentNote: XMLNote = null;
   let CurrentClef: XMLClef = null;
@@ -42,10 +53,32 @@ export function ParseTextPartWise(fileString: string): XMLScore {
   let NoteOctave: string = "";
   let IsChord: boolean = false;
   let IsRest: boolean = false;
+  let IsDynamicOnNextNote: boolean = false;
+  let NextDynamicString: string = "";
 
   Params.lines.forEach((line: string, i: number) => {
+    if (line.includes(Token.PartList)) {
+      Params.state = State.FindParts;
+    }
+    if (line.includes(Token.ScorePart) && !line.includes(Token.ScorePartWise)) {
+      // This does nothing for now
+    }
+    if (line.includes(Token.EndPartList)) {
+      if (Params.score.Instruments.length > 0) {
+        CurrentInstrument = Params.score.Instruments[0];
+        Params.state = State.FindMeasure;
+      }
+    }
+    if (line.includes(Token.Part)) {
+      let instr: XMLInstrument = null;
+      instr = FindOrCreateInstrument(Params, line);
+      if (instr.ID !== "") {
+        CurrentInstrument = instr;
+      }
+    }
     if (line.includes(Token.MeasureStart)) {
-      CurrentMeasure = FindMeasure(Params, line);
+      CurrentMeasure = FindMeasure(Params, line, CurrentInstrument.ID);
+      console.log("Adding measure to id: ", CurrentInstrument.ID);
       CurrentBeat = 1;
       LastStaff = 0;
       CurrentMeasure.Staves.push( { Number: 0 } );
@@ -53,10 +86,31 @@ export function ParseTextPartWise(fileString: string): XMLScore {
     if (CurrentMeasure) {
 
       if (line.includes("</measure")) {
+        CurrentMeasure = TieNotesInMeasure(CurrentMeasure);
+        console.log(CurrentMeasure.Dynamics);
         CurrentMeasure = null;
         LastBeat = 1;
         CurrentBeat = 1;
         LastDuration = 0;
+      }
+
+      if (line.includes(Token.Dynamics)) {
+        // Get next line, which has specific dynamic string
+        let nextLine = "";
+        if (Params.lines.length > (i + 1)) {
+          nextLine = Params.lines[i+1];
+        }
+        if (nextLine !== "") {
+          IsDynamicOnNextNote = true;
+          let split_line = nextLine.trim().split("/>");
+          if (split_line.length < 2) {
+            console.error("Could not get dynamic string");
+            IsDynamicOnNextNote = false;
+            NextDynamicString = "";
+          } else {
+            NextDynamicString = split_line[0].split("<")[1];
+          }
+        }
       }
 
       if (line.includes("<divisions")) {
@@ -122,6 +176,19 @@ export function ParseTextPartWise(fileString: string): XMLScore {
           CurrentMeasure.Notes.push(CurrentNote);
         }
       } else if (line.includes("</note")) {
+        // Dynamics appear in the music xml file before the note/beat that they are 
+        // assigned to
+        if (IsDynamicOnNextNote) {
+          let newDynamic: XMLDynamic = {
+            Symbol: NextDynamicString,
+            Staff: CurrentNote.Staff,
+            Beat: CurrentNote.Beat,
+          };
+          CurrentMeasure.Dynamics.push(newDynamic);
+          // reset to check for other dynamics next
+          IsDynamicOnNextNote = false;
+          NextDynamicString = "";
+        }
         CurrentNote = null;
         RunningNoteID += 1;
       }
@@ -157,6 +224,49 @@ export function ParseTextPartWise(fileString: string): XMLScore {
           CurrentNote.Alter = parseInt(GetContentBetweenTags(line));
         }
 
+        if (line.includes(Token.TiedStart)) {
+          if (line.includes("start") || line.includes("stop")) {
+            CurrentNote.Tied = true;
+          }
+        }
+
+        if (line.includes(Token.Staccato) && CurrentMeasure) {
+          if (!CurrentMeasure.Articulations) {
+            CurrentMeasure.Articulations = [];
+          }
+          CurrentMeasure.Articulations.push({
+            Type: XMLArticulationType.STACCATO,
+            Beat: CurrentNote.Beat,
+            Staff: CurrentNote.Staff,
+            Voice: CurrentNote.Voice,
+          });
+        }
+
+        if (line.includes(Token.Accent) && CurrentMeasure) {
+          if (!CurrentMeasure.Articulations) {
+            CurrentMeasure.Articulations = [];
+          }
+          CurrentMeasure.Articulations.push({
+            Type: XMLArticulationType.ACCENT,
+            Beat: CurrentNote.Beat,
+            Staff: CurrentNote.Staff,
+            Voice: CurrentNote.Voice,
+          });
+        }
+
+        if (line.includes(Token.Marcato) && CurrentMeasure) {
+          if (!CurrentMeasure.Articulations) {
+            CurrentMeasure.Articulations = [];
+          }
+          CurrentMeasure.Articulations.push({
+            Type: XMLArticulationType.MARCATO,
+            Beat: CurrentNote.Beat,
+            Staff: CurrentNote.Staff,
+            Voice: CurrentNote.Voice,
+          });
+        }
+
+
       } // CurrentNote End Loop
 
     } // CurrentMeasure End Loop
@@ -167,7 +277,9 @@ export function ParseTextPartWise(fileString: string): XMLScore {
   return Params.score;
 }
 
-function FindMeasure(params: Params, line: String): XMLMeasure {
+function FindMeasure(params: Params, line: string, partId: string): XMLMeasure {
+  console.log("Instruments should exist");
+  console.log(params.score.Instruments);
   if (line.includes(Token.MeasureStart)) {
     let id = 0;
     if (line.includes('number="')) {
@@ -176,11 +288,55 @@ function FindMeasure(params: Params, line: String): XMLMeasure {
         id = parseInt(split_line[1]);
       }
     }
-    let msr: XMLMeasure = CreateEmptyMeasure(id);
-    params.score.Measures.push(msr);
+    let msr: XMLMeasure = CreateEmptyMeasure(id, -1);
+    let instrument_index = 0;
+    for (let i = 0; i < params.score.Instruments.length; ++i) {
+      if (params.score.Instruments[i].ID === partId) {
+        instrument_index = i;
+      }
+    }
+    msr.InstrumentID = params.score.Instruments[instrument_index].IDNo;
+    if (msr.InstrumentID === -1) {
+      console.error("instrument ID is set to -1 for this measure!");
+    }
+    params.score.Instruments[instrument_index].Measures.push(msr);
     params.state = State.DefineMeasure;
     return msr;
   }
+}
+
+function FindOrCreateInstrument(params: Params, line: string): XMLInstrument {
+  let id = "";
+  let idNo = -1;
+  if (line.includes(Token.Part)) {
+      if (line.includes('id="')) {
+        let split_line = line.split('"');
+        if (split_line.length >= 3) {
+          id = split_line[1];
+        }
+      } else {
+        console.log("id not found in score part line");
+      }
+    
+    if (params.score.Instruments.length > 0) {
+      for (let i = 0; i < params.score.Instruments.length; ++i) {
+        if (params.score.Instruments[i].ID == id) {
+          return params.score.Instruments[i];
+        }
+      }
+    }
+
+    // Instrument not found, create a new one with ID
+    if (id === "") {
+      console.error("ID of Instrument not successfully parsed");
+    }
+  }
+  idNo = params.score.Instruments.length;
+  let instrument: XMLInstrument = CreateEmptyInstrument(id, idNo);
+  if (id !== "") {
+    params.score.Instruments.push(instrument);
+  }
+  return instrument;
 }
 
 function GetContentBetweenTags(line: string): string {
@@ -224,17 +380,30 @@ function CreateEmptyNote(id: number): XMLNote {
     Grace: false,
     Voice: 0,
     Alter: 0,
+    TiedStart: 0,
+    TiedEnd: 0,
   };
 }
 
-function CreateEmptyMeasure(id: number): XMLMeasure {
+function CreateEmptyMeasure(id: number, instrumentIdNo: number): XMLMeasure {
   return {
+    InstrumentID: instrumentIdNo,
     ID: id,
     Clefs: [],
     Staves: [],
     Key: "",
     TimeSignature: { top: 0, bottom: 0 },
     Notes: [],
+    Articulations: [],
+    Dynamics: [],
+  };
+}
+
+function CreateEmptyInstrument(id: string, idno: number): XMLInstrument {
+  return {
+    IDNo: idno,
+    ID: id,
+    Measures: [],
   };
 }
 

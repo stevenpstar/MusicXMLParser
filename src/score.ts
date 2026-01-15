@@ -3,6 +3,26 @@ export type XMLClef = {
   Staff: number;
 }
 
+export enum XMLArticulationType {
+  NONE = 0,
+  ACCENT = 1,
+  STACCATO = 2,
+  MARCATO = 3,
+}
+
+export type XMLArticulation = {
+  Type: XMLArticulationType,
+  Beat: number,
+  Staff: number,
+  Voice: number,
+};
+
+export type XMLDynamic = {
+  Symbol: string,
+  Staff: number,
+  Beat: number,
+};
+
 export type XMLStaff = {
   Number: number;
 }
@@ -17,23 +37,34 @@ export type XMLNote = {
    Grace: boolean;
    Voice: number;
    Alter: number;
+   TiedStart: number;
+   TiedEnd: number;
 }
 
 export type XMLMeasure = {
+  InstrumentID: number,
   ID: number,
   Clefs: XMLClef[],
   Staves: XMLStaff[],
   Key: string,
   TimeSignature: { top: number, bottom: number },
   Notes: XMLNote[],
+  Articulations: XMLArticulation[],
+  Dynamics: XMLDynamic[],
+};
+
+export type XMLInstrument = {
+  IDNo: number,
+  ID: string,
+  Measures: XMLMeasure[],
 };
 
 export type XMLScore = {
-  Measures: XMLMeasure[]
+  Instruments: XMLInstrument[]
 }
 
 export function CreateEmptyScore(): XMLScore {
   return {
-    Measures: [],
+    Instruments: [],
   };
 }
